@@ -95,8 +95,9 @@ def check_model(ctx):
 
 @cli.command()
 @click.argument('filename', required=False)
+@click.option('--force', is_flag=True, help='Force re-analysis of already analyzed files')
 @click.pass_context
-def analyze(ctx, filename):
+def analyze(ctx, filename, force):
     """Analyze a specific PDF file or all PDFs in the configured folder"""
     config_path = ctx.obj['config_path']
     
@@ -111,10 +112,10 @@ def analyze(ctx, filename):
                 console.print(f"[red]❌ File not found: {pdf_path}[/red]")
                 sys.exit(1)
             
-            result = analyzer.analyze_pdf(pdf_path)
+            result = analyzer.analyze_pdf(pdf_path, force_reanalysis=force)
             _display_result(result)
         else:
-            results = analyzer.analyze_all_pdfs()
+            results = analyzer.analyze_all_pdfs(force_reanalysis=force)
             if not results:
                 console.print("[yellow]⚠️  No PDF files found in the configured folder[/yellow]")
                 return
@@ -190,6 +191,7 @@ def _display_result(result):
     # File info header
     header_content = f"""📄 **File:** {result.filename}
 📊 **Pages:** {result.page_count} | **Words:** {result.word_count:,}
+🔒 **Hash:** {result.file_hash[:12]}...
 🕒 **Analyzed:** {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"""
     
     console.print(Panel(header_content, title="Analysis Result", style="bold blue"))

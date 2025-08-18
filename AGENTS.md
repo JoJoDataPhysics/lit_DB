@@ -22,3 +22,6 @@
 - `config.yaml`: Application configuration
 - `requirements.txt`: Python dependencies (no pyproject.toml)
 - Follow existing patterns: Pydantic models, logging setup, path handling with pathlib
+
+## Development Workflow
+- **Commit Rule**: After each major change (e.g. each prompt that delivers changes), create a commit with a descriptive commit message that explains the purpose and impact of the changes

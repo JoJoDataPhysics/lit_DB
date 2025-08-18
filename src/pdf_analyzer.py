@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import hashlib
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -90,8 +92,61 @@ class PDFAnalyzer:
             
         return chunks
     
-    def analyze_pdf(self, pdf_path: Path) -> AnalysisResult:
+    def _calculate_file_hash(self, pdf_path: Path) -> str:
+        """Calculate SHA-256 hash of PDF file for duplicate detection"""
+        try:
+            sha256_hash = hashlib.sha256()
+            with open(pdf_path, "rb") as f:
+                # Read file in chunks to handle large files efficiently
+                for chunk in iter(lambda: f.read(4096), b""):
+                    sha256_hash.update(chunk)
+            return sha256_hash.hexdigest()
+        except Exception as e:
+            self.logger.error(f"Failed to calculate hash for {pdf_path}: {e}")
+            # Return a fallback hash based on filename and size
+            return hashlib.sha256(f"{pdf_path.name}_{pdf_path.stat().st_size}".encode()).hexdigest()
+    
+    def _find_existing_analysis(self, file_hash: str) -> Optional[AnalysisResult]:
+        """Check if an analysis already exists for this file hash"""
+        results_folder = Path(self.config.output.results_folder)
+        if not results_folder.exists():
+            return None
+        
+        try:
+            # Search through existing result files
+            for result_file in results_folder.glob("*.json"):
+                try:
+                    with open(result_file, 'r') as f:
+                        data = json.load(f)
+                        
+                    # Check if this result has the same file hash
+                    if data.get('file_hash') == file_hash:
+                        self.logger.info(f"Found existing analysis in {result_file.name}")
+                        # Convert back to AnalysisResult object
+                        return AnalysisResult(**data)
+                        
+                except (json.JSONDecodeError, TypeError, KeyError) as e:
+                    self.logger.warning(f"Could not parse result file {result_file}: {e}")
+                    continue
+                    
+        except Exception as e:
+            self.logger.error(f"Error searching for existing analysis: {e}")
+            
+        return None
+    
+    def analyze_pdf(self, pdf_path: Path, force_reanalysis: bool = False) -> AnalysisResult:
         self.logger.info(f"Starting analysis of {pdf_path.name}")
+        
+        # Calculate file hash for duplicate detection
+        file_hash = self._calculate_file_hash(pdf_path)
+        self.logger.info(f"File hash: {file_hash}")
+        
+        # Check for existing analysis (duplicate detection)
+        if not force_reanalysis:
+            existing_result = self._find_existing_analysis(file_hash)
+            if existing_result:
+                self.logger.info(f"Found existing analysis for {pdf_path.name}, skipping")
+                return existing_result
         
         pdf_data = self.extract_text_from_pdf(pdf_path)
         model = self.ollama_client.ensure_model_available()
@@ -117,6 +172,7 @@ class PDFAnalyzer:
         # Create result with new multi-topic structure
         result = AnalysisResult(
             filename=pdf_path.name,
+            file_hash=file_hash,
             topics=topic_keywords_list,
             confidence_score=0.85,
             page_count=pdf_data["page_count"],
@@ -134,7 +190,8 @@ class PDFAnalyzer:
         max_topics = self.config.analysis.max_topics
         
         prompt = f"""Analyze this document text and identify the {max_topics} main topics discussed. 
-Return only the topic names, one per line, with 2-4 words per topic maximum.
+Return ONLY the topic names, one per line, with 2-4 words per topic maximum.
+Do not include explanations, numbering, or bullet points - just the topic names.
 
 Text: {combined_text}
 
@@ -143,21 +200,29 @@ Topics:"""
         try:
             response = self.ollama_client.generate_response(prompt, model)
             topics = []
+            
+            self.logger.debug(f"Raw topic response: {response}")
+            
             for line in response.strip().split('\n'):
                 line = line.strip()
-                # Clean up numbering or bullet points
-                if line and not line.startswith(('•', '-', '*')):
-                    # Remove numbers like "1.", "2.", etc.
-                    if line[0].isdigit() and '.' in line[:3]:
-                        line = line.split('.', 1)[1].strip()
-                    if line:
-                        topics.append(line[:50])
+                if line:
+                    # Clean up prefixes: numbers, bullets, dashes, asterisks
+                    cleaned_line = re.sub(r'^[\d\.\-\*•\s\)\]]+', '', line).strip()
+                    # Remove any trailing punctuation
+                    cleaned_line = re.sub(r'[:\.,;]+$', '', cleaned_line).strip()
+                    
+                    if cleaned_line and len(cleaned_line) > 1:  # Ensure meaningful content
+                        topics.append(cleaned_line[:50])
+                        self.logger.debug(f"Extracted topic: '{cleaned_line}'")
             
             # Ensure we have at least one topic
             if not topics:
+                self.logger.warning("No topics extracted, using fallback")
                 topics = ["General Topic"]
             
+            self.logger.info(f"Extracted {len(topics)} topics: {topics}")
             return topics[:max_topics]
+            
         except Exception as e:
             self.logger.error(f"Failed to extract topics: {e}")
             return ["Unknown Topic"]
@@ -234,13 +299,13 @@ Keywords: """
         self.logger.info(f"Found {len(pdf_files)} PDF files in {pdf_folder}")
         return pdf_files
     
-    def analyze_all_pdfs(self) -> List[AnalysisResult]:
+    def analyze_all_pdfs(self, force_reanalysis: bool = False) -> List[AnalysisResult]:
         pdf_files = self.scan_pdf_folder()
         results = []
         
         for pdf_file in pdf_files:
             try:
-                result = self.analyze_pdf(pdf_file)
+                result = self.analyze_pdf(pdf_file, force_reanalysis=force_reanalysis)
                 results.append(result)
                 self.logger.info(f"Successfully analyzed {pdf_file.name}")
             except Exception as e:

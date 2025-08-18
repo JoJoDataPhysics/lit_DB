@@ -55,6 +55,7 @@ def test_setup():
         # Test AnalysisResult with multiple topics
         test_result = AnalysisResult(
             filename="test.pdf",
+            file_hash="test_hash_123456",
             topics=[test_topic],
             confidence_score=0.85,
             page_count=10,

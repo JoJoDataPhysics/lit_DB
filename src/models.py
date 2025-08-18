@@ -11,6 +11,7 @@ class TopicKeywords(BaseModel):
 
 class AnalysisResult(BaseModel):
     filename: str
+    file_hash: str  # SHA-256 hash for duplicate detection
     topics: List[TopicKeywords] = Field(default_factory=list)
     confidence_score: float = Field(ge=0.0, le=1.0)
     timestamp: datetime = Field(default_factory=datetime.now)
