@@ -185,19 +185,33 @@ def install_model(ctx, model_name):
 
 
 def _display_result(result):
-    """Display analysis result in a formatted table"""
+    """Display analysis result with multiple topics and keywords"""
     
-    panel_content = f"""
-📄 **File:** {result.filename}
-📚 **Topic:** {result.topic}
+    # File info header
+    header_content = f"""📄 **File:** {result.filename}
 📊 **Pages:** {result.page_count} | **Words:** {result.word_count:,}
-🕒 **Analyzed:** {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+🕒 **Analyzed:** {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"""
+    
+    console.print(Panel(header_content, title="Analysis Result", style="bold blue"))
+    
+    # Display each topic with its keywords
+    if result.topics:
+        for i, topic_data in enumerate(result.topics, 1):
+            topic_content = f"""📚 **Topic {i}:** {topic_data.topic}
+⭐ **Confidence:** {topic_data.confidence_score:.2f}
 
 🔑 **Keywords:**
-{', '.join(result.keywords)}
-"""
-    
-    console.print(Panel(panel_content, title="Analysis Result", style="bold blue"))
+{', '.join(topic_data.keywords) if topic_data.keywords else 'No keywords found'}"""
+            
+            console.print(Panel(topic_content, style="cyan", padding=(0, 1)))
+    else:
+        # Fallback to legacy display if no topics found
+        fallback_content = f"""📚 **Topic:** {result.topic or 'Unknown'}
+
+🔑 **Keywords:**
+{', '.join(result.keywords) if result.keywords else 'No keywords found'}"""
+        
+        console.print(Panel(fallback_content, style="yellow", padding=(0, 1)))
 
 
 if __name__ == '__main__':
