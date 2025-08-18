@@ -1,0 +1,28 @@
+pdf:
+  folder_path: "./test_literature"
+  extensions: [".pdf"]
+  recursive_scan: false
+
+ollama:
+  url: "http://localhost:11434"
+  primary_model: "llama3.2:3b"
+  fallback_models: ["mistral:7b", "phi3:mini"]
+  auto_install: true
+
+analysis:
+  max_keywords: 10
+  chunk_size: 4000
+  context_overlap: 200
+
+output:
+  format: "json"
+  save_results: true
+  results_folder: "./results"
+
+setup:
+  check_ollama_running: true
+  install_model_on_startup: true
+
+logging:
+  level: "INFO"
+  file: "./logs/app.log"
