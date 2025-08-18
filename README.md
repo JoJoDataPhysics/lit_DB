@@ -16,50 +16,69 @@ A Python application that analyzes PDF ebooks using a local Ollama server to det
 
 ```mermaid
 graph TB
-    subgraph "CLI Interface"
-        CLI[main.py<br/>Click Commands]
+    %% User Interface Layer
+    subgraph "🖥️ User Interface Layer"
+        CLI["🚀 main.py<br/>📋 Click Commands<br/>🎨 Rich Formatting"]
     end
     
-    subgraph "Core Application"
-        PA[PDFAnalyzer<br/>Text Processing]
-        OC[OllamaClient<br/>LLM Interface] 
-        CM[ConfigManager<br/>Configuration]
-        DM[DatabaseManager<br/>SQLite Operations]
-        Models[models.py<br/>Data Validation]
+    %% Core Application Layer
+    subgraph "⚙️ Core Application Layer"
+        PA["📖 PDFAnalyzer<br/>🔍 Text Extraction<br/>🧠 Analysis Orchestration"]
+        OC["🤖 OllamaClient<br/>🔗 LLM Communication<br/>📡 Model Management"] 
+        CM["⚙️ ConfigManager<br/>📋 YAML Processing<br/>✅ Validation"]
+        DM["🗄️ DatabaseManager<br/>💾 SQLite Operations<br/>🔄 Deduplication Logic"]
+        Models["📊 models.py<br/>🛡️ Pydantic Validation<br/>📝 Data Schemas"]
     end
     
-    subgraph "External Systems"
-        Ollama[Ollama Server<br/>Local LLM]
-        PDFs[PDF Files<br/>test_literature/]
-        Config[config.yaml<br/>Settings]
+    %% External Systems Layer
+    subgraph "🌐 External Systems"
+        direction TB
+        Ollama["🦙 Ollama Server<br/>🧠 Local LLM Engine<br/>🔥 mistral:7b / llama3.2"]
+        PDFs["📚 PDF Collection<br/>📁 test_literature/<br/>📄 Document Library"]
+        Config["⚙️ config.yaml<br/>🔧 Application Settings<br/>🎛️ Model Configuration"]
     end
     
-    subgraph "Data Storage"
-        DB[(SQLite Database<br/>File Metadata & Results)]
-        JSON[JSON Results<br/>results/]
-        Logs[Application Logs<br/>logs/]
+    %% Data Persistence Layer
+    subgraph "💾 Data Persistence Layer"
+        direction LR
+        DB[("🗃️ SQLite Database<br/>📋 files, analysis_results, topics<br/>🔍 Hash-based Deduplication<br/>📊 Metadata & Analytics")]
+        JSON["📄 JSON Backup<br/>📁 results/<br/>💾 Legacy Format"]
+        Logs["📝 Application Logs<br/>📁 logs/<br/>🔍 Debug & Monitoring"]
     end
     
-    CLI --> PA
-    CLI --> CM
-    PA --> OC
-    PA --> DM
-    PA --> Models
-    CM --> Config
-    CM --> Models
-    DM --> DB
-    DM --> Models
-    OC --> Ollama
-    PA --> PDFs
-    PA --> JSON
-    PA --> Logs
+    %% Data Flow Connections
+    CLI ==>|"🎯 Commands"| PA
+    CLI ==>|"⚙️ Config"| CM
     
-    style CLI fill:#e1f5fe
-    style PA fill:#f3e5f5
-    style OC fill:#fff3e0
-    style DM fill:#e8f5e8
-    style DB fill:#fff9c4
-    style Ollama fill:#ffebee
+    PA ==>|"🤖 Analysis Requests"| OC
+    PA ==>|"💾 Store Results"| DM
+    PA ==>|"✅ Validate Data"| Models
+    PA ==>|"📖 Read Files"| PDFs
+    PA ==>|"📄 Backup Save"| JSON
+    PA ==>|"📝 Logging"| Logs
+    
+    CM ==>|"📋 Load Settings"| Config
+    CM ==>|"✅ Validate Config"| Models
+    
+    DM ==>|"🔍 Query/Store"| DB
+    DM ==>|"✅ Validate Schema"| Models
+    
+    OC ==>|"🔗 API Calls"| Ollama
+    
+    %% Enhanced Styling
+    classDef cliStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:3px,color:#0d47a1
+    classDef coreStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef externalStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100
+    classDef storageStyle fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#1b5e20
+    classDef databaseStyle fill:#fff9c4,stroke:#fbc02d,stroke-width:3px,color:#f57f17
+    classDef ollamaStyle fill:#ffebee,stroke:#d32f2f,stroke-width:2px,color:#b71c1c
+    
+    class CLI cliStyle
+    class PA,OC,CM,DM,Models coreStyle
+    class Ollama ollamaStyle
+    class PDFs,Config externalStyle
+    class JSON,Logs storageStyle
+    class DB databaseStyle
 ```
 
 ## Requirements
