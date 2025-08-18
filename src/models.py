@@ -3,14 +3,23 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 
-class AnalysisResult(BaseModel):
-    filename: str
+class TopicKeywords(BaseModel):
     topic: str
     keywords: List[str] = Field(default_factory=list)
+    confidence_score: float = Field(ge=0.0, le=1.0, default=0.8)
+
+
+class AnalysisResult(BaseModel):
+    filename: str
+    topics: List[TopicKeywords] = Field(default_factory=list)
     confidence_score: float = Field(ge=0.0, le=1.0)
     timestamp: datetime = Field(default_factory=datetime.now)
     page_count: int
     word_count: int
+    
+    # Backward compatibility fields (deprecated)
+    topic: Optional[str] = None
+    keywords: List[str] = Field(default_factory=list)
 
 
 class OllamaConfig(BaseModel):
@@ -27,7 +36,9 @@ class PDFConfig(BaseModel):
 
 
 class AnalysisConfig(BaseModel):
-    max_keywords: int = 10
+    max_topics: int = 3
+    max_keywords_per_topic: int = 8
+    max_keywords: int = 10  # Backward compatibility
     chunk_size: int = 4000
     context_overlap: int = 200
 
