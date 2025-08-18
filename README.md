@@ -12,6 +12,49 @@ A Python application that analyzes PDF ebooks using a local Ollama server to det
 - 💾 JSON result output
 - 🛠️ Automatic model installation
 
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "CLI Interface"
+        CLI[main.py<br/>Click Commands]
+    end
+    
+    subgraph "Core Application"
+        PA[PDFAnalyzer<br/>Text Processing]
+        OC[OllamaClient<br/>LLM Interface] 
+        CM[ConfigManager<br/>Configuration]
+        Models[models.py<br/>Data Validation]
+    end
+    
+    subgraph "External Systems"
+        Ollama[Ollama Server<br/>Local LLM]
+        PDFs[PDF Files<br/>test_literature/]
+        Config[config.yaml<br/>Settings]
+    end
+    
+    subgraph "Output"
+        JSON[JSON Results<br/>results/]
+        Logs[Application Logs<br/>logs/]
+    end
+    
+    CLI --> PA
+    CLI --> CM
+    PA --> OC
+    PA --> Models
+    CM --> Config
+    CM --> Models
+    OC --> Ollama
+    PA --> PDFs
+    PA --> JSON
+    PA --> Logs
+    
+    style CLI fill:#e1f5fe
+    style PA fill:#f3e5f5
+    style OC fill:#fff3e0
+    style Ollama fill:#ffebee
+```
+
 ## Requirements
 
 - Python 3.8+
