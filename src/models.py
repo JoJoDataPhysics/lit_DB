@@ -11,6 +11,7 @@ class TopicKeywords(BaseModel):
 
 class AnalysisResult(BaseModel):
     filename: str
+    file_path: Optional[str] = None  # Full path to the PDF file
     file_hash: str  # SHA-256 hash combining file content + model used
     analysis_model: str  # Model that generated this analysis
     topics: List[TopicKeywords] = Field(default_factory=list)
@@ -18,6 +19,13 @@ class AnalysisResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     page_count: int
     word_count: int
+    
+    # PDF metadata fields
+    author: Optional[str] = None
+    title: Optional[str] = None
+    subject: Optional[str] = None
+    creation_date: Optional[str] = None
+    modification_date: Optional[str] = None
     
     # Backward compatibility fields (deprecated)
     topic: Optional[str] = None
@@ -56,12 +64,19 @@ class LoggingConfig(BaseModel):
     file: str = "./logs/app.log"
 
 
+class DatabaseConfig(BaseModel):
+    path: str = "./data/lit_db.sqlite"
+    enable_persistence: bool = True
+    backup_json: bool = True
+
+
 class AppConfig(BaseModel):
     pdf: PDFConfig
     ollama: OllamaConfig
     analysis: AnalysisConfig
     output: OutputConfig
     logging: LoggingConfig = LoggingConfig()
+    database: DatabaseConfig = DatabaseConfig()
 
 
 class ModelStatus(BaseModel):

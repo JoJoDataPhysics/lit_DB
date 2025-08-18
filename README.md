@@ -24,6 +24,7 @@ graph TB
         PA[PDFAnalyzer<br/>Text Processing]
         OC[OllamaClient<br/>LLM Interface] 
         CM[ConfigManager<br/>Configuration]
+        DM[DatabaseManager<br/>SQLite Operations]
         Models[models.py<br/>Data Validation]
     end
     
@@ -33,7 +34,8 @@ graph TB
         Config[config.yaml<br/>Settings]
     end
     
-    subgraph "Output"
+    subgraph "Data Storage"
+        DB[(SQLite Database<br/>File Metadata & Results)]
         JSON[JSON Results<br/>results/]
         Logs[Application Logs<br/>logs/]
     end
@@ -41,9 +43,12 @@ graph TB
     CLI --> PA
     CLI --> CM
     PA --> OC
+    PA --> DM
     PA --> Models
     CM --> Config
     CM --> Models
+    DM --> DB
+    DM --> Models
     OC --> Ollama
     PA --> PDFs
     PA --> JSON
@@ -52,6 +57,8 @@ graph TB
     style CLI fill:#e1f5fe
     style PA fill:#f3e5f5
     style OC fill:#fff3e0
+    style DM fill:#e8f5e8
+    style DB fill:#fff9c4
     style Ollama fill:#ffebee
 ```
 
