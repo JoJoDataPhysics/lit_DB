@@ -13,6 +13,7 @@ from PyPDF2 import PdfReader
 from src.models import AnalysisResult, AppConfig, TopicKeywords
 from src.ollama_client import OllamaClient
 from src.config_manager import ConfigManager
+from src.database_manager import DatabaseManager
 
 
 class PDFAnalyzer:
@@ -21,6 +22,18 @@ class PDFAnalyzer:
         self.config = self.config_manager.get_config()
         self.ollama_client = OllamaClient(self.config.ollama)
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize database manager if persistence is enabled
+        self.db_manager = None
+        if self.config.database.enable_persistence:
+            try:
+                from src.database_manager import DatabaseManager
+                self.db_manager = DatabaseManager(self.config.database.path)
+                self.logger.info("Database persistence enabled")
+            except ImportError as e:
+                self.logger.warning(f"Could not import DatabaseManager: {e}")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize database: {e}")
         
         self._setup_logging()
         self._ensure_directories()
@@ -65,6 +78,49 @@ class PDFAnalyzer:
         except Exception as e:
             self.logger.error(f"Failed to extract text from {pdf_path}: {e}")
             raise
+    
+    def _extract_pdf_metadata(self, pdf_path: Path) -> Dict[str, Any]:
+        """Extract PDF metadata using PyPDF2."""
+        try:
+            with open(pdf_path, 'rb') as file:
+                pdf_reader = PdfReader(file)
+                metadata = pdf_reader.metadata
+                
+                if metadata:
+                    return {
+                        'author': metadata.get('/Author', '').strip() if metadata.get('/Author') else None,
+                        'title': metadata.get('/Title', '').strip() if metadata.get('/Title') else None,
+                        'subject': metadata.get('/Subject', '').strip() if metadata.get('/Subject') else None,
+                        'creator': metadata.get('/Creator', '').strip() if metadata.get('/Creator') else None,
+                        'producer': metadata.get('/Producer', '').strip() if metadata.get('/Producer') else None,
+                        'creation_date': str(metadata.get('/CreationDate', '')) if metadata.get('/CreationDate') else None,
+                        'modification_date': str(metadata.get('/ModDate', '')) if metadata.get('/ModDate') else None,
+                        'file_size': pdf_path.stat().st_size,
+                    }
+                else:
+                    return {
+                        'author': None,
+                        'title': None,
+                        'subject': None,
+                        'creator': None,
+                        'producer': None,
+                        'creation_date': None,
+                        'modification_date': None,
+                        'file_size': pdf_path.stat().st_size,
+                    }
+                    
+        except Exception as e:
+            self.logger.warning(f"Failed to extract metadata from {pdf_path}: {e}")
+            return {
+                'author': None,
+                'title': None,
+                'subject': None,
+                'creator': None,
+                'producer': None,
+                'creation_date': None,
+                'modification_date': None,
+                'file_size': pdf_path.stat().st_size,
+            }
     
     def _chunk_text(self, text: str) -> List[str]:
         words = text.split()
@@ -150,17 +206,27 @@ class PDFAnalyzer:
         self.logger.info(f"Starting analysis of {pdf_path.name}")
         
         pdf_data = self.extract_text_from_pdf(pdf_path)
+        metadata = self._extract_pdf_metadata(pdf_path)
         model = self.ollama_client.ensure_model_available()
         
-        # Calculate analysis hash combining file content + model used
-        analysis_hash = self._calculate_analysis_hash(pdf_path, model)
-        self.logger.info(f"Analysis hash (file + model): {analysis_hash}")
+        # Calculate file hash and analysis hash
+        file_hash = self._calculate_file_hash(pdf_path)
         
-        # Check for existing analysis (duplicate detection)
-        if not force_reanalysis:
+        # Check database for existing analysis first (more efficient than JSON scanning)
+        if self.db_manager and not force_reanalysis:
+            analysis_hash = self.db_manager._create_analysis_hash(file_hash, model)
+            if self.db_manager.file_already_analyzed(analysis_hash):
+                existing_result = self.db_manager.get_existing_analysis(analysis_hash)
+                if existing_result:
+                    self.logger.info(f"Found existing analysis in database for {pdf_path.name} with {model}, skipping")
+                    return existing_result
+        
+        # Fallback to JSON-based duplicate detection if database is disabled
+        if not self.db_manager and not force_reanalysis:
+            analysis_hash = self._calculate_analysis_hash(pdf_path, model)
             existing_result = self._find_existing_analysis(analysis_hash)
             if existing_result:
-                self.logger.info(f"Found existing analysis for {pdf_path.name} with {model}, skipping")
+                self.logger.info(f"Found existing analysis in JSON for {pdf_path.name} with {model}, skipping")
                 return existing_result
         
         # Extract multiple topics
@@ -181,21 +247,38 @@ class PDFAnalyzer:
             )
             topic_keywords_list.append(topic_keywords)
         
-        # Create result with new multi-topic structure
+        # Create result with enhanced metadata
         result = AnalysisResult(
             filename=pdf_path.name,
-            file_hash=analysis_hash,
+            file_path=str(pdf_path.absolute()),
+            file_hash=file_hash,
             analysis_model=model,
             topics=topic_keywords_list,
             confidence_score=0.85,
             page_count=pdf_data["page_count"],
             word_count=pdf_data["word_count"],
+            author=metadata.get('author'),
+            title=metadata.get('title'),
+            subject=metadata.get('subject'),
+            creation_date=metadata.get('creation_date'),
+            modification_date=metadata.get('modification_date'),
             # Backward compatibility
             topic=topics_data[0] if topics_data else "Unknown Topic",
             keywords=[kw for topic in topic_keywords_list for kw in topic.keywords][:self.config.analysis.max_keywords]
         )
         
-        self._save_result(result)
+        # Save to database if enabled
+        if self.db_manager:
+            try:
+                analysis_id = self.db_manager.save_analysis_result(result, metadata)
+                self.logger.info(f"Saved analysis to database with ID: {analysis_id}")
+            except Exception as e:
+                self.logger.error(f"Failed to save to database: {e}")
+        
+        # Always save JSON as backup if configured
+        if self.config.database.backup_json:
+            self._save_result(result)
+        
         return result
     
     def _extract_topics(self, text_chunks: List[str], model: str) -> List[str]:

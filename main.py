@@ -185,6 +185,118 @@ def install_model(ctx, model_name):
         sys.exit(1)
 
 
+@cli.command()
+@click.pass_context
+def db_status(ctx):
+    """Show database statistics"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        if not config.database.enable_persistence:
+            console.print("[yellow]⚠️  Database persistence is disabled[/yellow]")
+            return
+        
+        from src.database_manager import DatabaseManager
+        db_manager = DatabaseManager(config.database.path)
+        stats = db_manager.get_database_stats()
+        
+        console.print(Panel("📊 Database Statistics", style="bold cyan"))
+        
+        table = Table()
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+        
+        table.add_row("Files Analyzed", str(stats['file_count']))
+        table.add_row("Total Analyses", str(stats['analysis_count']))
+        table.add_row("Topics Extracted", str(stats['topic_count']))
+        table.add_row("Models Used", ", ".join(stats['models_used']) if stats['models_used'] else "None")
+        table.add_row("Database Path", stats['database_path'])
+        table.add_row("Database Size", f"{stats['database_size_mb']:.2f} MB")
+        
+        console.print(table)
+        
+    except Exception as e:
+        console.print(f"[red]❌ Failed to get database status: {e}[/red]")
+
+
+@cli.command()
+@click.option('--limit', default=20, help='Number of files to show')
+@click.pass_context
+def list_analyzed(ctx, limit):
+    """List previously analyzed files"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        if not config.database.enable_persistence:
+            console.print("[yellow]⚠️  Database persistence is disabled[/yellow]")
+            return
+        
+        from src.database_manager import DatabaseManager
+        db_manager = DatabaseManager(config.database.path)
+        files = db_manager.get_analyzed_files(limit)
+        
+        if not files:
+            console.print("[yellow]⚠️  No analyzed files found[/yellow]")
+            return
+        
+        table = Table(title=f"Recently Analyzed Files (Top {limit})")
+        table.add_column("Filename", style="cyan")
+        table.add_column("Author", style="green")
+        table.add_column("Title", style="blue")
+        table.add_column("Pages", style="yellow")
+        table.add_column("Words", style="magenta")
+        table.add_column("Analyses", style="red")
+        table.add_column("Last Analyzed", style="dim")
+        
+        for file_info in files:
+            table.add_row(
+                file_info['filename'],
+                file_info['author'] or 'N/A',
+                file_info['title'] or 'N/A',
+                str(file_info['page_count']) if file_info['page_count'] else 'N/A',
+                str(file_info['word_count']) if file_info['word_count'] else 'N/A',
+                str(file_info['analysis_count']),
+                file_info['last_analyzed'][:19] if file_info['last_analyzed'] else 'N/A'
+            )
+        
+        console.print(table)
+        
+    except Exception as e:
+        console.print(f"[red]❌ Failed to list analyzed files: {e}[/red]")
+
+
+@cli.command()
+@click.confirmation_option(prompt='Are you sure you want to drop the database?')
+@click.pass_context
+def drop_db(ctx):
+    """Drop (reset) the entire database - WARNING: This will delete all data!"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        if not config.database.enable_persistence:
+            console.print("[yellow]⚠️  Database persistence is disabled[/yellow]")
+            return
+        
+        from src.database_manager import DatabaseManager
+        db_manager = DatabaseManager(config.database.path)
+        db_manager.reset_database()
+        
+        console.print("[green]✅ Database has been reset successfully[/green]")
+        
+    except Exception as e:
+        console.print(f"[red]❌ Failed to reset database: {e}[/red]")
+        sys.exit(1)
+
+
 def _display_result(result):
     """Display analysis result with multiple topics and keywords"""
     
