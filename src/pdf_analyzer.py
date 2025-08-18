@@ -189,9 +189,11 @@ class PDFAnalyzer:
         combined_text = " ".join(text_chunks[:5])[:3000]
         max_topics = self.config.analysis.max_topics
         
-        prompt = f"""Analyze this document text and identify the {max_topics} main topics discussed. 
+        prompt = f"""Analyze this document text and identify the {max_topics} DISTINCT main topics discussed. 
+Each topic must be unique and non-overlapping. Avoid sub-topics when main topics exist.
 Return ONLY the topic names, one per line, with 2-4 words per topic maximum.
 Do not include explanations, numbering, or bullet points - just the topic names.
+Do not repeat or rephrase topics.
 
 Text: {combined_text}
 
@@ -215,12 +217,68 @@ Topics:"""
                         topics.append(cleaned_line[:50])
                         self.logger.debug(f"Extracted topic: '{cleaned_line}'")
             
+            # Remove duplicate topics before limiting count
+            unique_topics = []
+            seen_normalized = set()
+            
+            # Sort by length to prioritize shorter (more general) topics
+            sorted_topics = sorted(topics, key=len)
+            
+            for topic in sorted_topics:
+                # Normalize for comparison: lowercase, remove extra spaces, strip punctuation
+                normalized = re.sub(r'[^\w\s]', '', topic.lower().strip())
+                normalized = ' '.join(normalized.split())  # Remove extra whitespace
+                
+                # Skip invalid topics
+                if (not normalized or 
+                    len(normalized) < 3 or 
+                    topic.lower().startswith(('here are', 'the following', 'these are', 'topics:', 'here is')) or
+                    topic.lower() in ['introduction', 'acknowledgment', 'conclusion', 'summary', 'abstract', 'contents']):
+                    self.logger.debug(f"Skipping invalid topic: '{topic}'")
+                    continue
+                    
+                # Check for exact matches
+                if normalized in seen_normalized:
+                    self.logger.debug(f"Skipping duplicate topic: '{topic}'")
+                    continue
+                
+                # Check for semantic similarity with existing topics
+                is_similar = False
+                for existing_topic in unique_topics:
+                    # Normalize both topics for comparison
+                    norm1 = set(re.sub(r'[^\w\s]', '', topic.lower()).split())
+                    norm2 = set(re.sub(r'[^\w\s]', '', existing_topic.lower()).split())
+                    
+                    if len(norm1) > 0 and len(norm2) > 0:
+                        # Calculate word overlap
+                        common_words = norm1.intersection(norm2)
+                        total_words = norm1.union(norm2)
+                        overlap_ratio = len(common_words) / len(total_words) if total_words else 0
+                        
+                        # Check if topics are similar (high overlap or substring)
+                        topic_clean = topic.lower().strip()
+                        existing_clean = existing_topic.lower().strip()
+                        
+                        if (overlap_ratio >= 0.6 or 
+                            topic_clean in existing_clean or 
+                            existing_clean in topic_clean):
+                            self.logger.debug(f"Skipping similar topic: '{topic}' (similar to '{existing_topic}')")
+                            is_similar = True
+                            break
+                
+                if not is_similar:
+                    unique_topics.append(topic)
+                    seen_normalized.add(normalized)
+            
+            topics = unique_topics
+            self.logger.info(f"After deduplication: {len(topics)} unique topics")
+            
             # Ensure we have at least one topic
             if not topics:
                 self.logger.warning("No topics extracted, using fallback")
                 topics = ["General Topic"]
             
-            self.logger.info(f"Extracted {len(topics)} topics: {topics}")
+            self.logger.info(f"Final topics: {topics}")
             return topics[:max_topics]
             
         except Exception as e:
