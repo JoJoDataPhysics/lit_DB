@@ -11,7 +11,8 @@ class TopicKeywords(BaseModel):
 
 class AnalysisResult(BaseModel):
     filename: str
-    file_hash: str  # SHA-256 hash for duplicate detection
+    file_hash: str  # SHA-256 hash combining file content + model used
+    analysis_model: str  # Model that generated this analysis
     topics: List[TopicKeywords] = Field(default_factory=list)
     confidence_score: float = Field(ge=0.0, le=1.0)
     timestamp: datetime = Field(default_factory=datetime.now)

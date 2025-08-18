@@ -191,7 +191,8 @@ def _display_result(result):
     # File info header
     header_content = f"""📄 **File:** {result.filename}
 📊 **Pages:** {result.page_count} | **Words:** {result.word_count:,}
-🔒 **Hash:** {result.file_hash[:12]}...
+🤖 **Model:** {result.analysis_model}
+🔒 **Hash:** {result.file_hash[:16]}...
 🕒 **Analyzed:** {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"""
     
     console.print(Panel(header_content, title="Analysis Result", style="bold blue"))

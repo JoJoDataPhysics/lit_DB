@@ -56,6 +56,7 @@ def test_setup():
         test_result = AnalysisResult(
             filename="test.pdf",
             file_hash="test_hash_123456",
+            analysis_model="llama3.2:3b",
             topics=[test_topic],
             confidence_score=0.85,
             page_count=10,

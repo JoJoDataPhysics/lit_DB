@@ -93,7 +93,7 @@ class PDFAnalyzer:
         return chunks
     
     def _calculate_file_hash(self, pdf_path: Path) -> str:
-        """Calculate SHA-256 hash of PDF file for duplicate detection"""
+        """Calculate SHA-256 hash of PDF file content only (for internal use)"""
         try:
             sha256_hash = hashlib.sha256()
             with open(pdf_path, "rb") as f:
@@ -106,8 +106,16 @@ class PDFAnalyzer:
             # Return a fallback hash based on filename and size
             return hashlib.sha256(f"{pdf_path.name}_{pdf_path.stat().st_size}".encode()).hexdigest()
     
-    def _find_existing_analysis(self, file_hash: str) -> Optional[AnalysisResult]:
-        """Check if an analysis already exists for this file hash"""
+    def _calculate_analysis_hash(self, pdf_path: Path, model: str) -> str:
+        """Calculate combined hash of PDF content + model used for analysis uniqueness"""
+        file_hash = self._calculate_file_hash(pdf_path)
+        model_hash = hashlib.sha256(model.encode()).hexdigest()[:8]
+        analysis_hash = f"{file_hash[:32]}_{model_hash}"
+        self.logger.debug(f"Analysis hash for {pdf_path.name} with {model}: {analysis_hash}")
+        return analysis_hash
+    
+    def _find_existing_analysis(self, analysis_hash: str) -> Optional[AnalysisResult]:
+        """Check if an analysis already exists for this file + model combination"""
         results_folder = Path(self.config.output.results_folder)
         if not results_folder.exists():
             return None
@@ -119,10 +127,14 @@ class PDFAnalyzer:
                     with open(result_file, 'r') as f:
                         data = json.load(f)
                         
-                    # Check if this result has the same file hash
-                    if data.get('file_hash') == file_hash:
+                    # Check if this result has the same analysis hash (file + model)
+                    if data.get('file_hash') == analysis_hash:
                         self.logger.info(f"Found existing analysis in {result_file.name}")
-                        # Convert back to AnalysisResult object
+                        # Convert back to AnalysisResult object, handling missing analysis_model for backward compatibility
+                        if 'analysis_model' not in data and 'model_used' not in data:
+                            data['analysis_model'] = 'unknown'  # Backward compatibility
+                        elif 'model_used' in data:
+                            data['analysis_model'] = data['model_used']  # Migrate from old field name
                         return AnalysisResult(**data)
                         
                 except (json.JSONDecodeError, TypeError, KeyError) as e:
@@ -137,19 +149,19 @@ class PDFAnalyzer:
     def analyze_pdf(self, pdf_path: Path, force_reanalysis: bool = False) -> AnalysisResult:
         self.logger.info(f"Starting analysis of {pdf_path.name}")
         
-        # Calculate file hash for duplicate detection
-        file_hash = self._calculate_file_hash(pdf_path)
-        self.logger.info(f"File hash: {file_hash}")
+        pdf_data = self.extract_text_from_pdf(pdf_path)
+        model = self.ollama_client.ensure_model_available()
+        
+        # Calculate analysis hash combining file content + model used
+        analysis_hash = self._calculate_analysis_hash(pdf_path, model)
+        self.logger.info(f"Analysis hash (file + model): {analysis_hash}")
         
         # Check for existing analysis (duplicate detection)
         if not force_reanalysis:
-            existing_result = self._find_existing_analysis(file_hash)
+            existing_result = self._find_existing_analysis(analysis_hash)
             if existing_result:
-                self.logger.info(f"Found existing analysis for {pdf_path.name}, skipping")
+                self.logger.info(f"Found existing analysis for {pdf_path.name} with {model}, skipping")
                 return existing_result
-        
-        pdf_data = self.extract_text_from_pdf(pdf_path)
-        model = self.ollama_client.ensure_model_available()
         
         # Extract multiple topics
         topics_data = self._extract_topics(pdf_data["text_chunks"], model)
@@ -172,7 +184,8 @@ class PDFAnalyzer:
         # Create result with new multi-topic structure
         result = AnalysisResult(
             filename=pdf_path.name,
-            file_hash=file_hash,
+            file_hash=analysis_hash,
+            analysis_model=model,
             topics=topic_keywords_list,
             confidence_score=0.85,
             page_count=pdf_data["page_count"],
