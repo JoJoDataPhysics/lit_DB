@@ -63,7 +63,8 @@ def test_setup():
             page_count=10,
             word_count=1000,
             author="Test Author",
-            title="Test Title"
+            title="Test Title",
+            text_quality_score=0.9
         )
         print(f"✅ AnalysisResult model with {len(test_result.topics)} topics and metadata")
         

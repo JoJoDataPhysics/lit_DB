@@ -242,27 +242,43 @@ class PDFAnalyzer:
         
         # For each topic, extract specific keywords
         topic_keywords_list = []
+        all_keywords = []
+        
         for topic_name in topics_data:
             keywords = self._extract_keywords_for_topic(
                 pdf_data["text_chunks"], 
                 topic_name, 
                 model
             )
+            # Calculate topic-specific confidence (will be updated later with overall score)
             topic_keywords = TopicKeywords(
                 topic=topic_name,
                 keywords=keywords[:self.config.analysis.max_keywords_per_topic],
-                confidence_score=0.8
+                confidence_score=0.8  # Placeholder, will be updated
             )
             topic_keywords_list.append(topic_keywords)
+            all_keywords.extend(keywords[:self.config.analysis.max_keywords_per_topic])
         
-        # Create result with enhanced metadata
+        # Calculate dynamic confidence based on text and analysis quality
+        text_quality = self._assess_text_quality(pdf_data["full_text"])
+        dynamic_confidence = self._calculate_dynamic_confidence(
+            pdf_data["full_text"], 
+            topic_keywords_list, 
+            all_keywords
+        )
+        
+        # Update topic confidence scores with overall confidence
+        for topic_keywords in topic_keywords_list:
+            topic_keywords.confidence_score = dynamic_confidence
+        
+        # Create result with enhanced metadata and dynamic confidence
         result = AnalysisResult(
             filename=pdf_path.name,
-            file_path=str(pdf_path.absolute()),
+            file_path=str(pdf_path.absolute()),  
             file_hash=analysis_hash,  # Store analysis hash for deduplication
             analysis_model=model,
             topics=topic_keywords_list,
-            confidence_score=0.85,
+            confidence_score=dynamic_confidence,  # Use calculated confidence
             page_count=pdf_data["page_count"],
             word_count=pdf_data["word_count"],
             author=metadata.get('author'),
@@ -270,9 +286,10 @@ class PDFAnalyzer:
             subject=metadata.get('subject'),
             creation_date=metadata.get('creation_date'),
             modification_date=metadata.get('modification_date'),
+            text_quality_score=text_quality,  # Include text quality assessment
             # Backward compatibility
             topic=topics_data[0] if topics_data else "Unknown Topic",
-            keywords=[kw for topic in topic_keywords_list for kw in topic.keywords][:self.config.analysis.max_keywords]
+            keywords=all_keywords[:self.config.analysis.max_keywords]
         )
         
         # Save to database if enabled
@@ -293,15 +310,26 @@ class PDFAnalyzer:
         combined_text = " ".join(text_chunks[:5])[:3000]
         max_topics = self.config.analysis.max_topics
         
-        prompt = f"""Analyze this document text and identify the {max_topics} DISTINCT main topics discussed. 
-Each topic must be unique and non-overlapping. Avoid sub-topics when main topics exist.
-Return ONLY the topic names, one per line, with 2-4 words per topic maximum.
-Do not include explanations, numbering, or bullet points - just the topic names.
-Do not repeat or rephrase topics.
+        # Enhanced prompt with chain-of-thought reasoning
+        prompt = f"""Analyze this document and extract the main topics. Think step by step:
 
-Text: {combined_text}
+1. First, identify the document type (academic paper, technical manual, general text)
+2. Look for key themes, subject areas, and main concepts discussed
+3. Focus on specific, meaningful topics (avoid generic terms like "introduction" or "overview")
+4. Extract {max_topics} distinct, non-overlapping topics
+5. Each topic should be 2-4 words, specific and descriptive
 
-Topics:"""
+Example good topics: "Machine Learning Algorithms", "Climate Change Impact", "Software Architecture"
+Example bad topics: "Introduction", "Overview", "General Discussion"
+
+Text to analyze:
+{combined_text}
+
+Analysis:
+Document type: [Identify the type first]
+Main themes: [List key themes you observe]
+
+Final topics (exactly {max_topics}, one per line):"""
         
         try:
             response = self.ollama_client.generate_response(prompt, model)
@@ -309,15 +337,34 @@ Topics:"""
             
             self.logger.debug(f"Raw topic response: {response}")
             
-            for line in response.strip().split('\n'):
+            # Parse structured response - look for "Final topics" section or fall back to all lines
+            lines = response.strip().split('\n')
+            final_topics_section = False
+            found_final_section = False
+            
+            for line in lines:
                 line = line.strip()
-                if line:
+                
+                # Check if we found the "Final topics" section
+                if "final topics" in line.lower():
+                    final_topics_section = True
+                    found_final_section = True
+                    continue
+                
+                # Skip analysis sections when in structured mode
+                if found_final_section and line.lower().startswith(('document type:', 'main themes:', 'analysis:')):
+                    continue
+                    
+                # Process topic lines (either in final section or fallback to all lines)
+                if (final_topics_section or not found_final_section) and line:
                     # Clean up prefixes: numbers, bullets, dashes, asterisks
                     cleaned_line = re.sub(r'^[\d\.\-\*•\s\)\]]+', '', line).strip()
                     # Remove any trailing punctuation
                     cleaned_line = re.sub(r'[:\.,;]+$', '', cleaned_line).strip()
                     
-                    if cleaned_line and len(cleaned_line) > 1:  # Ensure meaningful content
+                    # Skip obvious non-topic lines
+                    if (cleaned_line and len(cleaned_line) > 1 and 
+                        not line.lower().startswith(('document type:', 'main themes:', 'analysis:', 'final topics'))):
                         topics.append(cleaned_line[:50])
                         self.logger.debug(f"Extracted topic: '{cleaned_line}'")
             
@@ -393,12 +440,23 @@ Topics:"""
         combined_text = " ".join(text_chunks[:5])[:3000]
         max_keywords = self.config.analysis.max_keywords_per_topic
         
-        prompt = f"""Extract {max_keywords} important keywords specifically related to the topic "{topic}" from this text. 
-Focus only on keywords that are directly relevant to this topic. Return only the keywords separated by commas, no explanations.
+        # Enhanced keyword extraction prompt with examples
+        prompt = f"""Extract the most relevant keywords for the topic "{topic}" from this text. Follow these steps:
 
-Text: {combined_text}
+1. Scan the text for terms directly related to "{topic}"
+2. Look for technical terms, proper nouns, and specific concepts
+3. Prioritize terms that appear multiple times or in important contexts
+4. Avoid generic words like "the", "and", "important", "study"
+5. Extract exactly {max_keywords} keywords
 
-Keywords for topic "{topic}":"""
+Good keywords examples:
+- For "Machine Learning": "neural networks", "algorithms", "training data", "classification"
+- For "Climate Change": "greenhouse gases", "global warming", "carbon emissions", "sea level"
+
+Text to analyze:
+{combined_text}
+
+Extract {max_keywords} keywords for topic "{topic}" (comma-separated, no explanations):"""
         
         try:
             response = self.ollama_client.generate_response(prompt, model)
@@ -474,3 +532,202 @@ Keywords: """
                 self.logger.error(f"Failed to analyze {pdf_file.name}: {e}")
         
         return results
+    
+    def _assess_text_quality(self, extracted_text: str) -> float:
+        """Assess the quality of extracted text from PDF."""
+        if not extracted_text or len(extracted_text.strip()) == 0:
+            return 0.0
+        
+        # Metrics for text quality assessment
+        metrics = {}
+        
+        # 1. Length check - ensure substantial content
+        text_length = len(extracted_text.strip())
+        metrics['length_score'] = min(1.0, text_length / 500)  # Normalize to 500 chars
+        
+        # 2. Word-to-character ratio - detect garbled text
+        words = extracted_text.split()
+        if text_length > 0:
+            word_char_ratio = len(' '.join(words)) / text_length
+            metrics['word_ratio'] = min(1.0, word_char_ratio * 1.2)  # Good ratio ~0.8
+        else:
+            metrics['word_ratio'] = 0.0
+        
+        # 3. Sentence structure detection
+        sentence_endings = extracted_text.count('.') + extracted_text.count('!') + extracted_text.count('?')
+        if len(words) > 0:
+            sentences_per_100_words = (sentence_endings / len(words)) * 100
+            # Ideal: 5-15 sentences per 100 words
+            metrics['sentence_structure'] = 1.0 - abs(sentences_per_100_words - 10) / 20
+            metrics['sentence_structure'] = max(0.0, min(1.0, metrics['sentence_structure']))
+        else:
+            metrics['sentence_structure'] = 0.0
+        
+        # 4. Special character ratio - too many might indicate OCR issues
+        special_chars = sum(1 for c in extracted_text if not c.isalnum() and not c.isspace())
+        if text_length > 0:
+            special_ratio = special_chars / text_length
+            # Good range: 5-15% special characters
+            metrics['special_char_ratio'] = 1.0 - abs(special_ratio - 0.10) / 0.10
+            metrics['special_char_ratio'] = max(0.0, min(1.0, metrics['special_char_ratio']))
+        else:
+            metrics['special_char_ratio'] = 0.0
+        
+        # 5. Repetitive pattern detection (OCR artifacts)
+        lines = extracted_text.split('\n')
+        unique_lines = set(line.strip() for line in lines if line.strip())
+        if len(lines) > 0:
+            uniqueness_ratio = len(unique_lines) / len(lines)
+            metrics['uniqueness'] = uniqueness_ratio
+        else:
+            metrics['uniqueness'] = 1.0
+        
+        # Weighted average of metrics
+        weights = {
+            'length_score': 0.2,
+            'word_ratio': 0.25,
+            'sentence_structure': 0.25,
+            'special_char_ratio': 0.15,
+            'uniqueness': 0.15
+        }
+        
+        quality_score = sum(metrics[key] * weights[key] for key in metrics)
+        
+        self.logger.debug(f"Text quality metrics: {metrics}")
+        self.logger.debug(f"Overall text quality score: {quality_score:.3f}")
+        
+        return quality_score
+    
+    def _score_topic_specificity(self, topics: List[str]) -> float:
+        """Score how specific and meaningful the extracted topics are."""
+        if not topics:
+            return 0.0
+        
+        specificity_scores = []
+        generic_terms = {
+            'introduction', 'overview', 'summary', 'conclusion', 'abstract',
+            'general', 'basic', 'important', 'main', 'key', 'discussion',
+            'analysis', 'study', 'research', 'paper', 'document', 'text'
+        }
+        
+        for topic in topics:
+            topic_lower = topic.lower().strip()
+            
+            # Penalize very short topics
+            length_score = min(1.0, len(topic.split()) / 3)  # 3+ words is ideal
+            
+            # Penalize generic terms
+            generic_penalty = 0.0
+            topic_words = set(topic_lower.split())
+            generic_overlap = len(topic_words.intersection(generic_terms))
+            if generic_overlap > 0:
+                generic_penalty = generic_overlap / len(topic_words)
+            
+            # Reward specific, technical, or proper noun terms
+            specificity_bonus = 0.0
+            if any(word[0].isupper() for word in topic.split()):  # Proper nouns
+                specificity_bonus += 0.2
+            if len(topic_words) >= 2:  # Multi-word topics are more specific
+                specificity_bonus += 0.3
+            
+            topic_score = length_score - generic_penalty + specificity_bonus
+            topic_score = max(0.0, min(1.0, topic_score))
+            specificity_scores.append(topic_score)
+        
+        return sum(specificity_scores) / len(specificity_scores)
+    
+    def _score_keyword_relevance(self, keywords: List[str], text: str) -> float:
+        """Score how relevant keywords are to the actual text content."""
+        if not keywords or not text:
+            return 0.0
+        
+        text_lower = text.lower()
+        text_words = set(text_lower.split())
+        
+        relevance_scores = []
+        
+        for keyword in keywords:
+            keyword_lower = keyword.lower().strip()
+            
+            # Direct presence in text
+            direct_presence = 1.0 if keyword_lower in text_lower else 0.0
+            
+            # Word-level presence (for multi-word keywords)
+            keyword_words = keyword_lower.split()
+            word_presence = sum(1 for word in keyword_words if word in text_words) / len(keyword_words)
+            
+            # Frequency bonus
+            frequency = text_lower.count(keyword_lower)
+            frequency_score = min(1.0, frequency / 3)  # Cap at 3 mentions
+            
+            # Length penalty for very short keywords (less meaningful)
+            length_penalty = 0.5 if len(keyword_lower) < 4 else 0.0
+            
+            keyword_score = max(direct_presence, word_presence) + frequency_score - length_penalty
+            keyword_score = max(0.0, min(1.0, keyword_score))
+            relevance_scores.append(keyword_score)
+        
+        return sum(relevance_scores) / len(relevance_scores)
+    
+    def _assess_response_quality(self, topics: List[str], keywords: List[str]) -> float:
+        """Assess the overall quality of LLM response."""
+        metrics = {}
+        
+        # Topic count - should have reasonable number of topics
+        expected_topics = self.config.analysis.max_topics
+        topic_count_score = min(1.0, len(topics) / expected_topics) if topics else 0.0
+        metrics['topic_count'] = topic_count_score
+        
+        # Keyword count - should have reasonable number of keywords per topic
+        total_expected_keywords = expected_topics * self.config.analysis.max_keywords_per_topic
+        keyword_count_score = min(1.0, len(keywords) / total_expected_keywords) if keywords else 0.0
+        metrics['keyword_count'] = keyword_count_score
+        
+        # Response completeness
+        has_topics = len(topics) > 0
+        has_keywords = len(keywords) > 0
+        completeness = (has_topics + has_keywords) / 2
+        metrics['completeness'] = completeness
+        
+        # Weighted average
+        weights = {'topic_count': 0.4, 'keyword_count': 0.4, 'completeness': 0.2}
+        return sum(metrics[key] * weights[key] for key in metrics)
+    
+    def _calculate_dynamic_confidence(self, text: str, topics: List[TopicKeywords], all_keywords: List[str]) -> float:
+        """Calculate dynamic confidence score based on multiple quality factors."""
+        
+        # Individual quality assessments
+        text_quality = self._assess_text_quality(text)
+        topic_specificity = self._score_topic_specificity([t.topic for t in topics])
+        keyword_relevance = self._score_keyword_relevance(all_keywords, text)
+        response_quality = self._assess_response_quality([t.topic for t in topics], all_keywords)
+        
+        # Weighted combination of quality factors
+        weights = {
+            'text_quality': 0.3,      # How well was the text extracted
+            'topic_specificity': 0.3, # How specific and meaningful are topics
+            'keyword_relevance': 0.25, # How relevant are keywords to content
+            'response_quality': 0.15   # How complete was the LLM response
+        }
+        
+        quality_scores = {
+            'text_quality': text_quality,
+            'topic_specificity': topic_specificity,
+            'keyword_relevance': keyword_relevance,
+            'response_quality': response_quality
+        }
+        
+        # Calculate weighted confidence
+        dynamic_confidence = sum(quality_scores[key] * weights[key] for key in weights)
+        
+        # Ensure confidence is in valid range
+        dynamic_confidence = max(0.1, min(0.99, dynamic_confidence))
+        
+        self.logger.info(f"Dynamic confidence calculation:")
+        self.logger.info(f"  Text quality: {text_quality:.3f}")
+        self.logger.info(f"  Topic specificity: {topic_specificity:.3f}")
+        self.logger.info(f"  Keyword relevance: {keyword_relevance:.3f}")
+        self.logger.info(f"  Response quality: {response_quality:.3f}")
+        self.logger.info(f"  Final confidence: {dynamic_confidence:.3f}")
+        
+        return dynamic_confidence

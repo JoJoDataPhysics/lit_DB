@@ -27,6 +27,9 @@ class AnalysisResult(BaseModel):
     creation_date: Optional[str] = None
     modification_date: Optional[str] = None
     
+    # Quality assessment fields
+    text_quality_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Text extraction quality score")
+    
     # Backward compatibility fields (deprecated)
     topic: Optional[str] = None
     keywords: List[str] = Field(default_factory=list)

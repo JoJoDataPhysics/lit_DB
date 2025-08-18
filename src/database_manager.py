@@ -125,7 +125,8 @@ class DatabaseManager:
                 title=row['title'],
                 subject=row['subject'],
                 creation_date=row['creation_date'],
-                modification_date=row['modification_date']
+                modification_date=row['modification_date'],
+                text_quality_score=None  # Not stored in database yet
             )
     
     def save_analysis_result(self, result: AnalysisResult, file_metadata: Dict[str, Any], file_hash: str) -> int:
