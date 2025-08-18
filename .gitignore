@@ -50,6 +50,12 @@ results/*.json
 test_literature/*.pdf
 !test_literature/sample_*.pdf
 
+# Database files
+data/
+*.sqlite
+*.sqlite3
+*.db
+
 # Temporary files
 *.tmp
 *.bak
