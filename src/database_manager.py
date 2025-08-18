@@ -114,7 +114,7 @@ class DatabaseManager:
             return AnalysisResult(
                 filename=row['filename'],
                 file_path=row['file_path'],
-                file_hash=analysis_hash.split('_')[0],  # Extract file hash from analysis hash
+                file_hash=analysis_hash,  # Return analysis hash for consistency with JSON storage
                 analysis_model=row['model_name'],
                 topics=topics,
                 confidence_score=row['confidence_score'],
@@ -128,14 +128,14 @@ class DatabaseManager:
                 modification_date=row['modification_date']
             )
     
-    def save_analysis_result(self, result: AnalysisResult, file_metadata: Dict[str, Any]) -> int:
+    def save_analysis_result(self, result: AnalysisResult, file_metadata: Dict[str, Any], file_hash: str) -> int:
         """Save analysis result to database."""
         with sqlite3.connect(self.db_path) as conn:
-            # Insert or update file record
-            file_id = self._upsert_file(conn, result, file_metadata)
+            # Insert or update file record with the actual file hash
+            file_id = self._upsert_file(conn, result, file_metadata, file_hash)
             
-            # Create analysis hash
-            analysis_hash = self._create_analysis_hash(result.file_hash, result.analysis_model)
+            # Use the analysis hash stored in result.file_hash
+            analysis_hash = result.file_hash
             
             # Insert analysis result
             cursor = conn.execute("""
@@ -167,12 +167,12 @@ class DatabaseManager:
                 raise ValueError("Failed to insert analysis result")
             return analysis_id
     
-    def _upsert_file(self, conn: sqlite3.Connection, result: AnalysisResult, metadata: Dict[str, Any]) -> int:
+    def _upsert_file(self, conn: sqlite3.Connection, result: AnalysisResult, metadata: Dict[str, Any], file_hash: str) -> int:
         """Insert or update file record, return file_id."""
-        # Check if file already exists
+        # Check if file already exists using the actual file hash
         cursor = conn.execute(
             "SELECT id FROM files WHERE file_path = ? AND file_hash = ?",
-            (result.file_path, result.file_hash)
+            (result.file_path, file_hash)
         )
         
         existing = cursor.fetchone()
@@ -184,7 +184,7 @@ class DatabaseManager:
             )
             return int(existing[0])
         
-        # Insert new file record
+        # Insert new file record with actual file hash
         cursor = conn.execute("""
             INSERT INTO files (
                 file_path, filename, file_hash, file_size, page_count, word_count,
@@ -193,7 +193,7 @@ class DatabaseManager:
         """, (
             result.file_path,
             result.filename,
-            result.file_hash,
+            file_hash,  # Use actual file hash, not analysis hash
             metadata.get('file_size'),
             result.page_count,
             result.word_count,

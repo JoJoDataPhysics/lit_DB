@@ -10,7 +10,7 @@ ollama:
   auto_install: true
 
 analysis:
-  max_topics: 3
+  max_topics: 5
   max_keywords_per_topic: 8
   max_keywords: 10  # Kept for backward compatibility
   chunk_size: 4000

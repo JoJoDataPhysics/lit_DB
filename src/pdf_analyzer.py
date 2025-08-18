@@ -162,12 +162,11 @@ class PDFAnalyzer:
             # Return a fallback hash based on filename and size
             return hashlib.sha256(f"{pdf_path.name}_{pdf_path.stat().st_size}".encode()).hexdigest()
     
-    def _calculate_analysis_hash(self, pdf_path: Path, model: str) -> str:
-        """Calculate combined hash of PDF content + model used for analysis uniqueness"""
-        file_hash = self._calculate_file_hash(pdf_path)
-        model_hash = hashlib.sha256(model.encode()).hexdigest()[:8]
-        analysis_hash = f"{file_hash[:32]}_{model_hash}"
-        self.logger.debug(f"Analysis hash for {pdf_path.name} with {model}: {analysis_hash}")
+    def _calculate_analysis_hash(self, file_hash: str, model: str) -> str:
+        """Calculate combined hash of file content + model used for analysis uniqueness"""
+        combined = f"{file_hash}_{model}"
+        analysis_hash = hashlib.sha256(combined.encode()).hexdigest()
+        self.logger.debug(f"Analysis hash for model {model}: {analysis_hash[:16]}...")
         return analysis_hash
     
     def _find_existing_analysis(self, analysis_hash: str) -> Optional[AnalysisResult]:
@@ -184,7 +183,9 @@ class PDFAnalyzer:
                         data = json.load(f)
                         
                     # Check if this result has the same analysis hash (file + model)
-                    if data.get('file_hash') == analysis_hash:
+                    # For backward compatibility, also check old-style file_hash field
+                    stored_hash = data.get('file_hash', '')
+                    if stored_hash == analysis_hash:
                         self.logger.info(f"Found existing analysis in {result_file.name}")
                         # Convert back to AnalysisResult object, handling missing analysis_model for backward compatibility
                         if 'analysis_model' not in data and 'model_used' not in data:
@@ -205,29 +206,36 @@ class PDFAnalyzer:
     def analyze_pdf(self, pdf_path: Path, force_reanalysis: bool = False) -> AnalysisResult:
         self.logger.info(f"Starting analysis of {pdf_path.name}")
         
-        pdf_data = self.extract_text_from_pdf(pdf_path)
-        metadata = self._extract_pdf_metadata(pdf_path)
+        # Get model first for hash calculation
         model = self.ollama_client.ensure_model_available()
         
-        # Calculate file hash and analysis hash
+        # Calculate file hash for deduplication
         file_hash = self._calculate_file_hash(pdf_path)
+        analysis_hash = self._calculate_analysis_hash(file_hash, model)
         
-        # Check database for existing analysis first (more efficient than JSON scanning)
-        if self.db_manager and not force_reanalysis:
-            analysis_hash = self.db_manager._create_analysis_hash(file_hash, model)
-            if self.db_manager.file_already_analyzed(analysis_hash):
-                existing_result = self.db_manager.get_existing_analysis(analysis_hash)
+        # Check for existing analysis (database first, then JSON fallback)
+        if not force_reanalysis:
+            # Database checking (primary)
+            if self.db_manager:
+                self.logger.debug(f"Checking database for analysis hash: {analysis_hash[:16]}...")
+                if self.db_manager.file_already_analyzed(analysis_hash):
+                    existing_result = self.db_manager.get_existing_analysis(analysis_hash)
+                    if existing_result:
+                        self.logger.info(f"✅ Found existing analysis in database for {pdf_path.name} with {model}, skipping")
+                        return existing_result
+                else:
+                    self.logger.debug(f"No existing analysis found in database for {pdf_path.name}")
+            
+            # JSON fallback checking (only if database is disabled)
+            else:
+                existing_result = self._find_existing_analysis(analysis_hash)
                 if existing_result:
-                    self.logger.info(f"Found existing analysis in database for {pdf_path.name} with {model}, skipping")
+                    self.logger.info(f"Found existing analysis in JSON for {pdf_path.name} with {model}, skipping")
                     return existing_result
         
-        # Fallback to JSON-based duplicate detection if database is disabled
-        if not self.db_manager and not force_reanalysis:
-            analysis_hash = self._calculate_analysis_hash(pdf_path, model)
-            existing_result = self._find_existing_analysis(analysis_hash)
-            if existing_result:
-                self.logger.info(f"Found existing analysis in JSON for {pdf_path.name} with {model}, skipping")
-                return existing_result
+        # Extract text and metadata for new analysis
+        pdf_data = self.extract_text_from_pdf(pdf_path)
+        metadata = self._extract_pdf_metadata(pdf_path)
         
         # Extract multiple topics
         topics_data = self._extract_topics(pdf_data["text_chunks"], model)
@@ -251,7 +259,7 @@ class PDFAnalyzer:
         result = AnalysisResult(
             filename=pdf_path.name,
             file_path=str(pdf_path.absolute()),
-            file_hash=file_hash,
+            file_hash=analysis_hash,  # Store analysis hash for deduplication
             analysis_model=model,
             topics=topic_keywords_list,
             confidence_score=0.85,
@@ -270,7 +278,7 @@ class PDFAnalyzer:
         # Save to database if enabled
         if self.db_manager:
             try:
-                analysis_id = self.db_manager.save_analysis_result(result, metadata)
+                analysis_id = self.db_manager.save_analysis_result(result, metadata, file_hash)
                 self.logger.info(f"Saved analysis to database with ID: {analysis_id}")
             except Exception as e:
                 self.logger.error(f"Failed to save to database: {e}")
