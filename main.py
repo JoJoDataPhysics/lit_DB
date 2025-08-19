@@ -297,6 +297,200 @@ def drop_db(ctx):
         sys.exit(1)
 
 
+@cli.command()
+@click.option('--limit', default=50, help='Number of topics to show')
+@click.option('--model', help='Filter by specific model')
+@click.pass_context
+def list_topics(ctx, limit, model):
+    """List all unique topics from database with frequency analysis"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        if not config.database.enable_persistence:
+            console.print("[yellow]⚠️  Database persistence is disabled[/yellow]")
+            return
+        
+        from src.database_manager import DatabaseManager
+        db_manager = DatabaseManager(config.database.path)
+        topics = db_manager.get_all_topics(limit=limit, model_filter=model)
+        
+        if not topics:
+            console.print("[yellow]⚠️  No topics found in database[/yellow]")
+            return
+        
+        # Create Rich table
+        title = f"📚 All Topics Analysis"
+        if model:
+            title += f" (Model: {model})"
+        
+        table = Table(title=title)
+        table.add_column("Topic", style="cyan", width=30)
+        table.add_column("Frequency", style="green", justify="center")
+        table.add_column("Avg Confidence", style="blue", justify="center")
+        table.add_column("Documents", style="yellow", justify="center")
+        table.add_column("Models Used", style="magenta", width=20)
+        
+        for topic_data in topics:
+            table.add_row(
+                topic_data['topic'],
+                str(topic_data['frequency']),
+                f"{topic_data['avg_confidence']:.3f}",
+                str(topic_data['document_count']),
+                topic_data['models_used'] or 'N/A'
+            )
+        
+        console.print(table)
+        console.print(f"\n[dim]Showing {len(topics)} topics (limit: {limit})[/dim]")
+        
+    except Exception as e:
+        console.print(f"[red]❌ Failed to list topics: {e}[/red]")
+
+
+@cli.command()
+@click.option('--limit', default=100, help='Number of keywords to show')
+@click.option('--topic', help='Filter by specific topic')
+@click.option('--min-frequency', default=1, help='Minimum frequency threshold')
+@click.pass_context
+def list_keywords(ctx, limit, topic, min_frequency):
+    """List all unique keywords from database with frequency analysis"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        if not config.database.enable_persistence:
+            console.print("[yellow]⚠️  Database persistence is disabled[/yellow]")
+            return
+        
+        from src.database_manager import DatabaseManager
+        db_manager = DatabaseManager(config.database.path)
+        keywords = db_manager.get_all_keywords(
+            limit=limit, 
+            topic_filter=topic, 
+            min_frequency=min_frequency
+        )
+        
+        if not keywords:
+            console.print("[yellow]⚠️  No keywords found matching criteria[/yellow]")
+            return
+        
+        # Create Rich table
+        title = f"🔑 Keywords Frequency Analysis"
+        if topic:
+            title += f" (Topic: {topic})"
+        if min_frequency > 1:
+            title += f" (Min Frequency: {min_frequency})"
+        
+        table = Table(title=title)
+        table.add_column("Keyword", style="cyan", width=25)
+        table.add_column("Frequency", style="green", justify="center")
+        table.add_column("Avg Confidence", style="blue", justify="center")
+        table.add_column("Found in Topics", style="yellow", width=40)
+        
+        for keyword_data in keywords:
+            table.add_row(
+                keyword_data['keyword'],
+                str(keyword_data['frequency']),
+                f"{keyword_data['avg_confidence']:.3f}",
+                keyword_data['found_in_topics'][:40] + "..." if len(keyword_data['found_in_topics']) > 40 else keyword_data['found_in_topics']
+            )
+        
+        console.print(table)
+        console.print(f"\n[dim]Showing {len(keywords)} keywords (limit: {limit}, min frequency: {min_frequency})[/dim]")
+        
+    except Exception as e:
+        console.print(f"[red]❌ Failed to list keywords: {e}[/red]")
+
+
+@cli.command()
+@click.option('--format', type=click.Choice(['table', 'json']), default='table', help='Output format')
+@click.option('--confidence-threshold', default=0.0, help='Minimum confidence score', type=float)
+@click.option('--model', help='Filter by specific model')
+@click.pass_context
+def topic_keywords(ctx, format, confidence_threshold, model):
+    """Show detailed topic to keywords mapping"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        if not config.database.enable_persistence:
+            console.print("[yellow]⚠️  Database persistence is disabled[/yellow]")
+            return
+        
+        from src.database_manager import DatabaseManager
+        db_manager = DatabaseManager(config.database.path)
+        mappings = db_manager.get_topic_keyword_mapping(
+            confidence_threshold=confidence_threshold,
+            model_filter=model
+        )
+        
+        if not mappings:
+            console.print("[yellow]⚠️  No topic-keyword mappings found matching criteria[/yellow]")
+            return
+        
+        if format == 'json':
+            import json
+            # Group by topic for JSON output
+            topics_dict = {}
+            for mapping in mappings:
+                topic = mapping['topic']
+                if topic not in topics_dict:
+                    topics_dict[topic] = {
+                        'topic': topic,
+                        'confidence_score': mapping['confidence_score'],
+                        'keywords': json.loads(mapping['keywords']) if mapping['keywords'] else [],
+                        'model_name': mapping['model_name'],
+                        'filename': mapping['filename']
+                    }
+            
+            console.print(json.dumps(list(topics_dict.values()), indent=2))
+        
+        else:
+            # Table format
+            title = f"🗺️ Topic → Keywords Mapping"
+            if confidence_threshold > 0:
+                title += f" (Min Confidence: {confidence_threshold})"
+            if model:
+                title += f" (Model: {model})"
+            
+            table = Table(title=title)
+            table.add_column("Topic", style="cyan", width=25)
+            table.add_column("Confidence", style="blue", justify="center")
+            table.add_column("Model", style="green", justify="center")
+            table.add_column("Keywords", style="yellow", width=45)
+            table.add_column("Source File", style="magenta", justify="center")
+            
+            for mapping in mappings:
+                # Parse keywords JSON
+                try:
+                    keywords_list = json.loads(mapping['keywords']) if mapping['keywords'] else []
+                    keywords_str = ', '.join(keywords_list[:8])  # Show first 8 keywords
+                    if len(keywords_list) > 8:
+                        keywords_str += "..."
+                except:
+                    keywords_str = "N/A"
+                
+                table.add_row(
+                    mapping['topic'],
+                    f"{mapping['confidence_score']:.3f}",
+                    mapping['model_name'],
+                    keywords_str,
+                    mapping['filename'][:20] + "..." if len(mapping['filename']) > 20 else mapping['filename']
+                )
+            
+            console.print(table)
+            console.print(f"\n[dim]Showing {len(mappings)} topic-keyword mappings[/dim]")
+        
+    except Exception as e:
+        console.print(f"[red]❌ Failed to show topic-keywords mapping: {e}[/red]")
+
+
 def _display_result(result):
     """Display analysis result with multiple topics and keywords"""
     

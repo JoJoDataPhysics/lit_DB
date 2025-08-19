@@ -267,3 +267,126 @@ class DatabaseManager:
             self.db_path.unlink()
         self._init_database()
         self.logger.info("Database reset successfully")
+    
+    def get_all_topics(self, limit: int = 50, model_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get all unique topics with frequency and confidence statistics."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            
+            # Build query with optional model filter
+            base_query = """
+                SELECT DISTINCT t.topic, 
+                       COUNT(*) as frequency,
+                       AVG(t.confidence_score) as avg_confidence,
+                       MIN(t.confidence_score) as min_confidence,
+                       MAX(t.confidence_score) as max_confidence,
+                       GROUP_CONCAT(DISTINCT ar.model_name) as models_used,
+                       COUNT(DISTINCT ar.file_id) as document_count
+                FROM topics t
+                JOIN analysis_results ar ON t.analysis_id = ar.id
+            """
+            
+            params = []
+            if model_filter:
+                base_query += " WHERE ar.model_name = ?"
+                params.append(model_filter)
+            
+            base_query += """
+                GROUP BY t.topic
+                ORDER BY frequency DESC, avg_confidence DESC
+                LIMIT ?
+            """
+            params.append(limit)
+            
+            cursor = conn.execute(base_query, params)
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_all_keywords(self, limit: int = 100, topic_filter: Optional[str] = None, 
+                        min_frequency: int = 1) -> List[Dict[str, Any]]:
+        """Extract all keywords from JSON arrays with frequency analysis."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            
+            # Build base query to extract keywords from JSON arrays
+            base_query = """
+                SELECT keyword, 
+                       COUNT(*) as frequency,
+                       GROUP_CONCAT(DISTINCT topic) as found_in_topics,
+                       AVG(confidence_score) as avg_confidence
+                FROM (
+                    SELECT json_each.value as keyword, 
+                           t.topic, 
+                           t.confidence_score
+                    FROM topics t, json_each(t.keywords)
+                    WHERE json_valid(t.keywords) AND json_each.value IS NOT NULL AND json_each.value != ''
+            """
+            
+            params = []
+            if topic_filter:
+                base_query += " AND t.topic = ?"
+                params.append(topic_filter)
+            
+            base_query += """
+                ) 
+                GROUP BY keyword
+                HAVING COUNT(*) >= ?
+                ORDER BY frequency DESC, avg_confidence DESC
+                LIMIT ?
+            """
+            params.extend([min_frequency, limit])
+            
+            cursor = conn.execute(base_query, params)
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_topic_keyword_mapping(self, confidence_threshold: float = 0.0, 
+                                 model_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get detailed topic to keywords mapping."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            
+            base_query = """
+                SELECT t.topic,
+                       t.confidence_score,
+                       t.keywords,
+                       ar.model_name,
+                       f.filename
+                FROM topics t
+                JOIN analysis_results ar ON t.analysis_id = ar.id
+                JOIN files f ON ar.file_id = f.id
+                WHERE t.confidence_score >= ?
+            """
+            
+            params: List[Any] = [confidence_threshold]
+            if model_filter:
+                base_query += " AND ar.model_name = ?"
+                params.append(model_filter)
+            
+            base_query += " ORDER BY t.topic, t.confidence_score DESC"
+            
+            cursor = conn.execute(base_query, params)
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_keyword_topic_cross_reference(self, min_frequency: int = 2) -> List[Dict[str, Any]]:
+        """Get keywords that appear across multiple topics."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            
+            cursor = conn.execute("""
+                SELECT keyword,
+                       COUNT(DISTINCT topic) as topic_count,
+                       COUNT(*) as total_frequency,
+                       GROUP_CONCAT(DISTINCT topic) as topics,
+                       AVG(confidence_score) as avg_confidence
+                FROM (
+                    SELECT json_each.value as keyword,
+                           t.topic,
+                           t.confidence_score
+                    FROM topics t, json_each(t.keywords)
+                    WHERE json_valid(t.keywords) AND json_each.value IS NOT NULL AND json_each.value != ''
+                )
+                GROUP BY keyword
+                HAVING COUNT(DISTINCT topic) >= ? AND COUNT(*) >= ?
+                ORDER BY topic_count DESC, total_frequency DESC
+            """, (2, min_frequency))
+            
+            return [dict(row) for row in cursor.fetchall()]
