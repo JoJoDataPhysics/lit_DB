@@ -358,6 +358,25 @@ python main.py list-topics --limit 5
 ### 6. 📊 **Database Analytics & Query System**
 *Priority: High | Status: Completed*
 
+#### **Bug Fix: topic-keywords Command**
+**Problem**: The `topic-keywords` command was displaying empty keyword columns (showing "N/A" for all entries) despite keywords being correctly stored in the database as JSON arrays.
+
+**Root Cause**: Import scoping issue in `main.py` - `json` module was conditionally imported inside the JSON format block but used in the table format block where it was out of scope.
+
+**Solution**: Removed redundant `import json` statement on line 438, relying on the global import at the top of the file.
+
+**Verification**: 
+```bash
+python main.py topic-keywords --format table
+# ✅ Now displays: "AI, ML, Neural Networks, Deep Learning, CNN, RNN, Transformers"
+
+python main.py topic-keywords --format json
+# ✅ Properly formatted JSON with keyword arrays
+
+python main.py topic-keywords --confidence-threshold 0.8
+# ✅ Filtering works with keywords displayed correctly
+```
+
 #### **Objective**
 Transform the SQLite database into a queryable knowledge base with comprehensive analytics and data export capabilities.
 
@@ -473,7 +492,7 @@ The lit_DB project has undergone **significant evolution** during this developme
 - **📅 Development Duration**: Extended development session (August 19, 2025)
 - **💻 Lines of Code Added**: 1,100+ lines of new functionality
 - **📊 Components Created**: 2 major new modules + analytics engine
-- **🔧 Bugs Fixed**: 1 critical deduplication issue
+- **🔧 Bugs Fixed**: 2 critical issues (deduplication logic + topic-keywords display)
 - **📚 Documentation**: 600+ lines of comprehensive documentation
 - **✅ Test Coverage**: All major workflows + analytics validated
 - **📈 Recent Addition**: 319 lines of database analytics system

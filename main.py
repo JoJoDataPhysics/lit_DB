@@ -435,7 +435,6 @@ def topic_keywords(ctx, format, confidence_threshold, model):
             return
         
         if format == 'json':
-            import json
             # Group by topic for JSON output
             topics_dict = {}
             for mapping in mappings:
