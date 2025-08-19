@@ -1,0 +1,84 @@
+                                                   🗺️ Topic → Keywords Mapping                                                    
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Topic                     ┃ Confidence ┃   Model    ┃ Keywords                                      ┃       Source File       ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ AI/ML Specific Algorithms │   0.949    │ mistral:7b │ AI, ML, Neural Networks, Deep Learning, CNN,  │   sample_ml_book.pdf    │
+│ (CNN, RNN, Transformers)  │            │            │ RNN, Transformers, Algorithms                 │                         │
+│ Computer Vision           │   0.949    │ mistral:7b │ machine learning, artificial intelligence,    │   sample_ml_book.pdf    │
+│ Techniques                │            │            │ computer vision, neural networks, deep        │                         │
+│                           │            │            │ learning, algorithms, CNN, RNN                │                         │
+│ Conditionals              │   0.785    │ mistral:7b │ cond, what is truth?, truth?, cond, if, else, │ introduction-to-cloj... │
+│                           │            │            │ looping, conditionals                         │                         │
+│ Continuous Mappings (or   │   0.905    │ mistral:7b │ Topology, Open Sets, Finite-Closed Topology,  │       morris.pdf        │
+│ Metric Spaces)            │            │            │ Limit Points, Neighbourhoods, Homeomorphisms, │                         │
+│                           │            │            │ Continuous Mappings, Metric Spaces            │                         │
+│ Data Science              │   0.949    │ mistral:7b │ machine learning, artificial intelligence,    │   sample_ml_book.pdf    │
+│ Methodologies             │            │            │ neural networks, deep learning, data science, │                         │
+│                           │            │            │ computer vision, algorithms, unsupervised     │                         │
+│                           │            │            │ learning                                      │                         │
+│ Deep Learning Algorithms  │   0.949    │ mistral:7b │ Deep learning, multi-layered neural networks, │   sample_ml_book.pdf    │
+│                           │            │            │ CNN, RNN, transformers, algorithms,           │                         │
+│                           │            │            │ supervised learning, reinforcement learning   │                         │
+│ Euclidean Topology        │   0.905    │ mistral:7b │ Euclidean Topology, Topological Spaces,       │       morris.pdf        │
+│                           │            │            │ Basis, Limit Points, Homeomorphisms,          │                         │
+│                           │            │            │ Continuous Mappings, Metric Spaces,           │                         │
+│                           │            │            │ Neighbourhoods                                │                         │
+│ Homeomorphisms            │   0.905    │ mistral:7b │ Topology, Open Sets, Finite-Closed Topology,  │       morris.pdf        │
+│                           │            │            │ Postscript, Homeomorphisms, Subspaces,        │                         │
+│                           │            │            │ Non-Homeomorphic Spaces, Continuous Mappings  │                         │
+│ Introduction to           │   0.967    │ mistral:7b │ Thermodynamic system, control volume,         │      notes_td.pdf       │
+│ Thermodynamics            │            │            │ Macroscopic versus microscopic, Properties    │                         │
+│                           │            │            │ and state of a substance, Processes and       │                         │
+│                           │            │            │ cycles, Fundamental variables, Zeroth law of  │                         │
+│                           │            │            │ thermodynamics, Pure substance                │                         │
+│ Limit Points              │   0.905    │ mistral:7b │ Limit Points, Closure, Neighbourhoods,        │       morris.pdf        │
+│                           │            │            │ Connectedness, Euclidean Topology, Basis,     │                         │
+│                           │            │            │ Homeomorphisms, Continuous Mappings           │                         │
+│ Looping                   │   0.785    │ mistral:7b │ 1. Looping                                    │ introduction-to-cloj... │
+│ Macroscopic versus        │   0.967    │ mistral:7b │ Macroscopic, Microscopic, Thermodynamic       │      notes_td.pdf       │
+│ Microscopic               │            │            │ system, Control volume, Properties, State of  │                         │
+│                           │            │            │ a substance, Processes, Cycles                │                         │
+│ Main Dishes (Rumpsteak,   │   0.940    │ mistral:7b │ Main Dishes, Rumpsteak, Mr. Rumpsteak,        │ block-house-speiseka... │
+│ Mr. Rumpsteak, Hereford   │            │            │ Hereford Ri, Beef Tatar, Burrata D.O.P,       │                         │
+│ Ri                        │            │            │ Putenbruststeaks, Salad                       │                         │
+│ Mutation                  │   0.785    │ mistral:7b │ 1. Mutation                                   │ introduction-to-cloj... │
+│ Namespaces                │   0.785    │ mistral:7b │ Namespaces, Clojure, Defn, Lambda,            │ introduction-to-cloj... │
+│                           │            │            │ AnotherShortcut, Built-inDataStructures,      │                         │
+│                           │            │            │ CreatingFunctions, HashMaps                   │                         │
+│ Neural Network            │   0.949    │ mistral:7b │ Neural networks, deep learning,               │   sample_ml_book.pdf    │
+│ Foundations               │            │            │ interconnected nodes, brain neurons,          │                         │
+│                           │            │            │ multi-layered neural networks, CNN, RNN,      │                         │
+│                           │            │            │ transformers                                  │                         │
+│ Processes and Cycles      │   0.967    │ mistral:7b │ Processes and cycles, thermodynamic system,   │      notes_td.pdf       │
+│                           │            │            │ control volume, macroscopic, microscopic,     │                         │
+│                           │            │            │ properties, state of a substance, processes   │                         │
+│ Properties of a Pure      │   0.967    │ mistral:7b │ Properties of a pure substance, pure          │      notes_td.pdf       │
+│ Substance                 │            │            │ substance, vapor-liquid-solid phase           │                         │
+│                           │            │            │ equilibrium, independent properties, thermal  │                         │
+│                           │            │            │ equations of state, ideal gas law, van der    │                         │
+│                           │            │            │ Waals, Redlich-Kwong                          │                         │
+│ Records                   │   0.785    │ mistral:7b │ 1. Records                                    │ introduction-to-cloj... │
+│ Salad Offerings           │   0.940    │ mistral:7b │ Salat, Salatsaucen, Blatt- und Eisbergsalate, │ block-house-speiseka... │
+│                           │            │            │ Tomaten, American Dressing, French Dressing,  │                         │
+│                           │            │            │ Italian Dressing, Caesar Salad                │                         │
+│ Side Dishes (Baked        │   0.940    │ mistral:7b │ Baked Potato, Salat, Salatsaucen, Paprika,    │ block-house-speiseka... │
+│ Potato, Bread)            │            │            │ Gurken, Zwiebeln, French Dressing, BLOCK      │                         │
+│                           │            │            │ HOUSE Brot                                    │                         │
+│ Soup Selection            │   0.940    │ mistral:7b │ Bull Soup, Zwiebelsuppe, Gulaschsuppe, Garden │ block-house-speiseka... │
+│                           │            │            │ Potato Linguine, Baked Potato,                │                         │
+│                           │            │            │ Quinoa-Gemüse-Mix, Rumpsteak, Rib-Eye         │                         │
+│ Thermal Equations of      │   0.967    │ mistral:7b │ Thermal equations of state, ideal gas law,    │      notes_td.pdf       │
+│ State                     │            │            │ non-ideal thermal equations of state, van der │                         │
+│                           │            │            │ Waals, Redlich-Kwong, compressibility factor, │                         │
+│                           │            │            │ tabular thermal equations of state, saturated │                         │
+│                           │            │            │ liquid-vapor water                            │                         │
+│ Topological Spaces        │   0.905    │ mistral:7b │ Topology, Open Sets, Finite-Closed Topology,  │       morris.pdf        │
+│                           │            │            │ Euclidean Topology, Limit Points,             │                         │
+│                           │            │            │ Homeomorphisms, Continuous Mappings, Metric   │                         │
+│                           │            │            │ Spaces                                        │                         │
+│ Vegetarian Options        │   0.940    │ mistral:7b │ Salat, Salatsaucen, Blattspinat, Babyspinat,  │ block-house-speiseka... │
+│                           │            │            │ Pesto, Garden Potato Linguine,                │                         │
+│                           │            │            │ Quinoa-Gemüse-Mix, vegetarische Gerichte      │                         │
+└───────────────────────────┴────────────┴────────────┴───────────────────────────────────────────────┴─────────────────────────┘
+
+Showing 25 topic-keyword mappings
