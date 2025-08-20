@@ -522,5 +522,222 @@ def _display_result(result):
         console.print(Panel(fallback_content, style="yellow", padding=(0, 1)))
 
 
+@cli.command()
+@click.argument('query')
+@click.option('--limit', default=5, help='Number of similar documents to return')
+@click.option('--threshold', default=None, type=float, help='Similarity threshold (0.0-1.0)')
+@click.pass_context
+def semantic_search(ctx, query, limit, threshold):
+    """Search for documents semantically similar to a text query"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        # Initialize vector database manager
+        from src.vector_db_manager import VectorDatabaseManager
+        vector_db = VectorDatabaseManager(config)
+        
+        console.print(Panel(f"🔍 Semantic Search: '{query}'", style="bold blue"))
+        
+        # Perform semantic search
+        results = vector_db.find_similar_documents(query, limit=limit, threshold=threshold)
+        
+        if not results:
+            console.print("[yellow]⚠️  No similar documents found[/yellow]")
+            return
+        
+        # Display results in a table
+        table = Table(title=f"Similar Documents (Top {len(results)})")
+        table.add_column("Filename", style="cyan", width=25)
+        table.add_column("Similarity", style="green", justify="center")
+        table.add_column("Title", style="blue", width=30)
+        table.add_column("Author", style="magenta", width=20)
+        table.add_column("Topics", style="yellow", width=40)
+        
+        for result in results:
+            table.add_row(
+                result['filename'],
+                f"{result['similarity_score']:.3f}",
+                result['title'][:27] + "..." if len(result['title']) > 30 else result['title'],
+                result['author'][:17] + "..." if len(result['author']) > 20 else result['author'],
+                result['topics'][:37] + "..." if len(result['topics']) > 40 else result['topics']
+            )
+        
+        console.print(table)
+        
+        # Show matched text snippets
+        console.print("\n[bold]📝 Text Matches:[/bold]")
+        for i, result in enumerate(results[:3], 1):  # Show top 3 matches
+            console.print(f"\n[cyan]{i}. {result['filename']}[/cyan]")
+            console.print(f"[dim]{result['matched_text']}[/dim]")
+        
+    except ImportError:
+        console.print("[red]❌ Vector database dependencies not available. Please run: pip install -r requirements.txt[/red]")
+    except Exception as e:
+        console.print(f"[red]❌ Semantic search failed: {e}[/red]")
+
+
+@cli.command()
+@click.argument('filename')
+@click.option('--limit', default=5, help='Number of similar documents to return')
+@click.pass_context
+def find_similar(ctx, filename, limit):
+    """Find documents similar to a specific PDF file"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        # Initialize vector database manager
+        from src.vector_db_manager import VectorDatabaseManager
+        vector_db = VectorDatabaseManager(config)
+        
+        console.print(Panel(f"🔍 Finding documents similar to: {filename}", style="bold blue"))
+        
+        # Find similar documents
+        results = vector_db.find_similar_to_document(filename, limit=limit)
+        
+        if not results:
+            console.print(f"[yellow]⚠️  No similar documents found to {filename}[/yellow]")
+            console.print("[dim]Make sure the document has been analyzed and is in the vector database[/dim]")
+            return
+        
+        # Display results in a table
+        table = Table(title=f"Documents Similar to {filename}")
+        table.add_column("Filename", style="cyan", width=25)
+        table.add_column("Similarity", style="green", justify="center")
+        table.add_column("Title", style="blue", width=30)
+        table.add_column("Author", style="magenta", width=15)
+        table.add_column("Topics", style="yellow", width=35)
+        table.add_column("Pages", style="white", justify="center")
+        
+        for result in results:
+            table.add_row(
+                result['filename'],
+                f"{result['similarity_score']:.3f}",
+                result['title'][:27] + "..." if len(result['title']) > 30 else result['title'],
+                result['author'][:12] + "..." if len(result['author']) > 15 else result['author'],
+                result['topics'][:32] + "..." if len(result['topics']) > 35 else result['topics'],
+                str(result['page_count'])
+            )
+        
+        console.print(table)
+        
+    except ImportError:
+        console.print("[red]❌ Vector database dependencies not available. Please run: pip install -r requirements.txt[/red]")
+    except Exception as e:
+        console.print(f"[red]❌ Find similar failed: {e}[/red]")
+
+
+@cli.command()
+@click.option('--num-clusters', default=5, help='Number of clusters to create')
+@click.option('--format', type=click.Choice(['table', 'json']), default='table', help='Output format')
+@click.pass_context
+def cluster_documents(ctx, num_clusters, format):
+    """Perform document clustering analysis"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        # Initialize vector database manager
+        from src.vector_db_manager import VectorDatabaseManager
+        vector_db = VectorDatabaseManager(config)
+        
+        console.print(Panel(f"📊 Clustering Documents into {num_clusters} Groups", style="bold blue"))
+        
+        # Perform clustering
+        clustering_result = vector_db.cluster_documents(num_clusters=num_clusters)
+        
+        if 'error' in clustering_result:
+            console.print(f"[red]❌ Clustering failed: {clustering_result['error']}[/red]")
+            return
+        
+        if format == 'json':
+            console.print(json.dumps(clustering_result, indent=2))
+            return
+        
+        # Display clustering results in tables
+        console.print(f"\n[green]✅ Clustered {clustering_result['total_documents']} documents into {clustering_result['num_clusters']} clusters[/green]")
+        
+        for cluster_id, cluster_info in clustering_result['clusters'].items():
+            console.print(f"\n[bold cyan]📁 Cluster {cluster_id}[/bold cyan] [dim]({cluster_info['size']} documents)[/dim]")
+            
+            if cluster_info['common_topics']:
+                console.print(f"[yellow]🏷️  Common Topics:[/yellow] {cluster_info['common_topics']}")
+            
+            console.print(f"[blue]🎯 Representative Document:[/blue] {cluster_info['representative_document']}")
+            
+            # Show documents in cluster
+            cluster_table = Table(show_header=True, box=None)
+            cluster_table.add_column("Document", style="cyan", width=30)
+            cluster_table.add_column("Author", style="green", width=20)
+            cluster_table.add_column("Topics", style="yellow", width=40)
+            cluster_table.add_column("Pages", justify="center")
+            
+            for doc in cluster_info['documents']:
+                cluster_table.add_row(
+                    doc['filename'][:27] + "..." if len(doc['filename']) > 30 else doc['filename'],
+                    doc['author'][:17] + "..." if len(doc['author']) > 20 else doc['author'],
+                    doc['topics'][:37] + "..." if len(doc['topics']) > 40 else doc['topics'],
+                    str(doc['page_count'])
+                )
+            
+            console.print(cluster_table)
+        
+    except ImportError:
+        console.print("[red]❌ Vector database dependencies not available. Please run: pip install -r requirements.txt[/red]")
+    except Exception as e:
+        console.print(f"[red]❌ Document clustering failed: {e}[/red]")
+
+
+@cli.command()
+@click.pass_context
+def vector_stats(ctx):
+    """Show vector database statistics"""
+    config_path = ctx.obj['config_path']
+    
+    try:
+        config_manager = ConfigManager(config_path)
+        config = config_manager.get_config()
+        
+        # Initialize vector database manager
+        from src.vector_db_manager import VectorDatabaseManager
+        vector_db = VectorDatabaseManager(config)
+        
+        console.print(Panel("📊 Vector Database Statistics", style="bold cyan"))
+        
+        # Get collection statistics
+        stats = vector_db.get_collection_stats()
+        
+        if 'error' in stats:
+            console.print(f"[red]❌ Failed to get stats: {stats['error']}[/red]")
+            return
+        
+        # Display stats in a table
+        table = Table()
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+        
+        table.add_row("Total Document Chunks", str(stats['total_chunks']))
+        table.add_row("Unique Documents", str(stats['unique_documents']))
+        table.add_row("Unique Authors", str(stats['unique_authors']))
+        table.add_row("Analysis Models Used", ", ".join(stats['analysis_models_used']) if stats['analysis_models_used'] else "None")
+        table.add_row("Collection Name", stats['collection_name'])
+        table.add_row("Embedding Model", stats['embedding_model'])
+        table.add_row("Database Path", stats['database_path'])
+        
+        console.print(table)
+        
+    except ImportError:
+        console.print("[red]❌ Vector database dependencies not available. Please run: pip install -r requirements.txt[/red]")
+    except Exception as e:
+        console.print(f"[red]❌ Failed to get vector database stats: {e}[/red]")
+
+
 if __name__ == '__main__':
     cli()

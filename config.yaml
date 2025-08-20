@@ -33,3 +33,13 @@ database:
   path: "./data/lit_db.sqlite"
   enable_persistence: true
   backup_json: true
+
+vector_db:
+  backend: "chromadb"
+  path: "./data/chromadb"
+  collection_name: "lit_documents"
+  embedding_model: "all-MiniLM-L6-v2"
+  enable_clustering: true
+  similarity_threshold: 0.7
+  chunk_overlap: 200
+  max_chunk_size: 1000

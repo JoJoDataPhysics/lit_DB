@@ -9,8 +9,11 @@ A Python application that analyzes PDF ebooks using a local Ollama server to det
 - 🔑 Configurable keyword extraction (max number via config)
 - 📊 Topic detection and classification
 - 📁 Batch processing of PDF folders
-- 💾 JSON result output
+- 💾 SQLite database with JSON backup
 - 🛠️ Automatic model installation
+- 🔍 **NEW:** Semantic similarity search using ChromaDB
+- 📈 **NEW:** Document clustering and topic analysis
+- 🧠 **NEW:** Vector embeddings for intelligent document discovery
 
 ## Architecture
 
@@ -102,6 +105,8 @@ graph TB
    ```bash
    pip install -r requirements.txt
    ```
+   
+   *Note: The new semantic features require additional dependencies (ChromaDB, sentence-transformers, scikit-learn, numpy). These will be installed automatically with the requirements.txt.*
 
 3. **Start Ollama server:**
    ```bash
@@ -138,6 +143,28 @@ python main.py check-model
 ### Install a specific model:
 ```bash
 python main.py install-model llama3.2:3b
+```
+
+### Semantic Search Commands:
+
+#### Search for documents by natural language query:
+```bash
+python main.py semantic-search "machine learning algorithms" --limit 5
+```
+
+#### Find documents similar to a specific PDF:
+```bash
+python main.py find-similar "sample_ml_book.pdf" --limit 3
+```
+
+#### Cluster documents by semantic similarity:
+```bash
+python main.py cluster-documents --num-clusters 5
+```
+
+#### View vector database statistics:
+```bash
+python main.py vector-stats
 ```
 
 ## Configuration

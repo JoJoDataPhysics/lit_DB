@@ -73,6 +73,17 @@ class DatabaseConfig(BaseModel):
     backup_json: bool = True
 
 
+class VectorDBConfig(BaseModel):
+    backend: str = "chromadb"
+    path: str = "./data/chromadb"
+    collection_name: str = "lit_documents"
+    embedding_model: str = "all-MiniLM-L6-v2"
+    enable_clustering: bool = True
+    similarity_threshold: float = 0.7
+    chunk_overlap: int = 200
+    max_chunk_size: int = 1000
+
+
 class AppConfig(BaseModel):
     pdf: PDFConfig
     ollama: OllamaConfig
@@ -80,6 +91,7 @@ class AppConfig(BaseModel):
     output: OutputConfig
     logging: LoggingConfig = LoggingConfig()
     database: DatabaseConfig = DatabaseConfig()
+    vector_db: VectorDBConfig = VectorDBConfig()
 
 
 class ModelStatus(BaseModel):

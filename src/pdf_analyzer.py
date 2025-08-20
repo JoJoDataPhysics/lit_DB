@@ -35,6 +35,17 @@ class PDFAnalyzer:
             except Exception as e:
                 self.logger.error(f"Failed to initialize database: {e}")
         
+        # Initialize vector database manager
+        self.vector_db_manager = None
+        try:
+            from src.vector_db_manager import VectorDatabaseManager
+            self.vector_db_manager = VectorDatabaseManager(self.config)
+            self.logger.info("Vector database initialized")
+        except ImportError as e:
+            self.logger.warning(f"Vector database dependencies not available: {e}")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize vector database: {e}")
+        
         self._setup_logging()
         self._ensure_directories()
         
@@ -299,6 +310,17 @@ class PDFAnalyzer:
                 self.logger.info(f"Saved analysis to database with ID: {analysis_id}")
             except Exception as e:
                 self.logger.error(f"Failed to save to database: {e}")
+        
+        # Save to vector database if enabled
+        if self.vector_db_manager:
+            try:
+                success = self.vector_db_manager.add_document(result, pdf_data["full_text"])
+                if success:
+                    self.logger.info(f"Saved document embeddings to vector database: {result.filename}")
+                else:
+                    self.logger.warning(f"Failed to save embeddings for: {result.filename}")
+            except Exception as e:
+                self.logger.error(f"Failed to save to vector database: {e}")
         
         # Always save JSON as backup if configured
         if self.config.database.backup_json:

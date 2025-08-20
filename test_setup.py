@@ -90,6 +90,30 @@ def test_setup():
         except Exception as e:
             print(f"⚠️  Database test failed (this is OK if database is not fully integrated): {e}")
         
+        print("\nTesting vector database functionality...")
+        try:
+            # Test vector database dependencies
+            try:
+                from src.vector_db_manager import VectorDatabaseManager
+                print("✅ Vector database manager imported successfully")
+                
+                # Test with config
+                vector_db = VectorDatabaseManager(config)
+                print("✅ Vector database initialized successfully")
+                
+                # Test basic operations
+                stats = vector_db.get_collection_stats()
+                print(f"✅ Vector database stats: {stats.get('total_chunks', 0)} chunks, {stats.get('unique_documents', 0)} documents")
+                
+                print("✅ Vector database functionality is available")
+                
+            except ImportError as e:
+                print(f"⚠️  Vector database dependencies not available: {e}")
+                print("   To enable semantic capabilities, run: pip install -r requirements.txt")
+                
+        except Exception as e:
+            print(f"⚠️  Vector database test failed: {e}")
+        
         return True
         
     except Exception as e:
